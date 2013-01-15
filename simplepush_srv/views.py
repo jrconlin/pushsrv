@@ -34,7 +34,7 @@ def gen_token(request):
 def get_register(request):
     """ Return a new channelID (and possibly a user agent) """
     storage = request.registry.get('storage')
-    logger = request.register.get('logger')
+    logger = request.registry.get('logger')
     uaid = request.headers.get('X-UserAgent-ID', gen_token(request))
     chid = gen_token(request)
     if storage.register_chid(uaid, chid, logger):
@@ -47,7 +47,7 @@ def get_register(request):
 def del_chid(request):
     """ Delete a channel """
     storage = request.registry.get('storage')
-    logger = request.register.get('logger')
+    logger = request.registry.get('logger')
     uaid = request.headers.get('X-UserAgent-ID')
     chid = request.matchdict.get('chid')
     if uaid is None:
@@ -56,6 +56,7 @@ def del_chid(request):
         raise http.HTTPNotFound()
     if not storage.delete_chid(uaid, chid, logger):
         raise http.HTTPServerError("Delete Failure")
+    return {}
 
 
 @update.get()
@@ -65,7 +66,7 @@ def get_update(request):
     if not uaid:
         raise http.HTTPForbidden()
     storage = request.registry.get('storage')
-    logger = request.register.get('logger')
+    logger = request.registry.get('logger')
     updates = storage.get_updates(uaid, logger)
     if updates is None:
         raise http.HTTPGone  # 410
@@ -84,7 +85,7 @@ def post_update(request):
     # TODO: verify that the uaid doesn't exist.
     import pdb; pdb.set_trace()
     storage = request.registry.get('storage')
-    logger = request.register.get('logger')
+    logger = request.registry.get('logger')
     try:
         data = json.loads(request.body)
         digest = storage.reload_data(uaid, data, logger)
@@ -101,7 +102,7 @@ def channel_update(request):
     if version is None:
         raise http.HTTPNoContent
     storage = request.registry.get('storage')
-    logger = request.register.get('logger')
+    logger = request.registry.get('logger')
     chid = request.matchdict.get('chid')
     try:
         if storage.update_chid(chid, version, logger):

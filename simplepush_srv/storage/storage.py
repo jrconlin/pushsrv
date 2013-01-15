@@ -77,7 +77,8 @@ class Storage(StorageBase):
             return False
         session = self.Session()
         try:
-            rec = session.query(SimplePushSQL).filter_by(chid=chid).first()
+            rec = session.query(SimplePushSQL).filter_by(chid=chid,
+                                                         state=1).first()
             rec.vers = vers
             rec.last = int(time.time())
             session.commit()
@@ -106,8 +107,8 @@ class Storage(StorageBase):
         if chid is None or uaid is None:
             return False
         try:
-            self.register_chids(uaid, {'channelID': chid,
-                                 'vers': None})
+            self.register_chids(uaid, [{'channelID': chid,
+                                 'version': None}], logger)
         except Exception, e:
             import pdb; pdb.set_trace()
             logger.error(str(e))
@@ -120,7 +121,7 @@ class Storage(StorageBase):
         try:
             session = self.Session()
             rec = session.query(SimplePushSQL).filter_by(chid=chid,
-                                                         uaid=uaid)
+                                                         uaid=uaid).first()
             rec.state=0
             #rec.delete()
             session.commit()
@@ -135,9 +136,8 @@ class Storage(StorageBase):
             raise StorageException('No UserAgentID provided')
         try:
             session = self.Session()
-            import pdb; pdb.set_trace()
             records = session.query(SimplePushSQL).filter_by(uaid=uaid)
-            if records.row_count == 0:
+            if records.count() == 0:
                 return None
             digest = []
             updates = []
@@ -166,11 +166,13 @@ class Storage(StorageBase):
         try:
             session = self.Session()
             digest = []
+            if session.query(SimplePushSQL).filter_by(uaid=uaid).count():
+                return False
             for datum in data:
-                session.add(SimplePushSQL(chid=data.get('channelID'),
+                session.add(SimplePushSQL(chid=datum.get('channelID'),
                                           uaid=uaid,
-                                          vers=data.get('version')))
-            digest.add(data.get('channelID'))
+                                          vers=datum.get('version')))
+                digest.append(datum.get('channelID'))
             session.commit()
             return ",".join(digest)
         except Exception, e:
@@ -178,9 +180,20 @@ class Storage(StorageBase):
             logger.error(str(e))
         return False
 
+    def _get_record(self, chid):
+        result = []
+        try:
+            session = self.Session()
+            recs = session.query(SimplePushSQL).filter_by(chid=chid)
+            for rec in recs:
+                result.append(rec.__dict__)
+            return result
+        except Exception, e:
+            import pdb; pdb.set_trace()
+            logger.error(str(e))
 
     def purge(self):
         session = self.Session()
-        sql = 'delete from %s;' % self.__tablename__
+        sql = 'delete from simplepush;'
         self.engine.execute(text(sql))
         session.commit()
