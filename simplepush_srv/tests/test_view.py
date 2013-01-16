@@ -101,7 +101,7 @@ class TestViews(unittest2.TestCase):
                                                        'Content-Type':
                                                        'application/json'},
                                               body=json.dumps(restore)))
-        assert(response.get('digest'), 'aaa,bbb')
+        assert(response.get('digest') == 'aaa,bbb')
         self.assertRaises(http.HTTPGone, views.post_update,
                           self.req(headers={'X-UserAgent-ID': '111'},
                                    body=json.dumps(restore)))
