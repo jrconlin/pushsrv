@@ -53,7 +53,7 @@ def del_chid(request):
     if uaid is None:
         raise http.HTTPForbidden()
     if chid is None:
-        raise http.HTTPNotFound()
+        raise http.HTTPNotFound
     if not storage.delete_chid(uaid, chid, logger):
         raise http.HTTPServerError("Delete Failure")
     return {}
@@ -82,16 +82,14 @@ def post_update(request):
     uaid = request.headers.get('X-UserAgent-ID')
     if not uaid:
         raise http.HTTPForbidden()
-    # TODO: verify that the uaid doesn't exist.
-    import pdb; pdb.set_trace()
+    #Storage checks for duplicate uaid info
     storage = request.registry.get('storage')
     logger = request.registry.get('logger')
     try:
-        data = json.loads(request.body)
+        data = request.json_body
         digest = storage.reload_data(uaid, data, logger)
         return {'digest': digest}
     except Exception, e:
-        import pdb; pdb.set_trace()
         logger.error(str(e))
         raise http.HTTPGone
 
@@ -108,13 +106,12 @@ def channel_update(request):
         if storage.update_chid(chid, version, logger):
             return {}
         else:
-            if inRecovery():
+            if inRecovery(request.registry['safe']):
                 # add retry period?
                 raise http.HTTPServiceUnavailable()
             else:
                 raise http.HTTPNotFound()
     except Exception, e:
-        import pdb; pdb.set_trace()
         logger.error(str(e))
         raise e
 

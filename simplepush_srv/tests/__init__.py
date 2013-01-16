@@ -15,9 +15,12 @@ class FakeLogger:
     def error(self, s):
         self.log(s)
 
+    def warn(self, s):
+        self.log(s)
+
     def log(self, s):
-        import pdb; pdb.set_trace()
-        print s
+        #print s
+        pass
 
 
 def Request(params=None, post=None, matchdict=None, headers=None,

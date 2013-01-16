@@ -79,14 +79,15 @@ class Storage(StorageBase):
         try:
             rec = session.query(SimplePushSQL).filter_by(chid=chid,
                                                          state=1).first()
-            rec.vers = vers
-            rec.last = int(time.time())
-            session.commit()
+            if (rec):
+                rec.vers = vers
+                rec.last = int(time.time())
+                session.commit()
+                return True
         except Exception, e:
             import pdb; pdb.set_trace()
             logger.warn(str(e))
-            return False
-        return True
+        return False
 
     def register_chids(self, uaid, pairs, logger):
         try:
@@ -122,9 +123,10 @@ class Storage(StorageBase):
             session = self.Session()
             rec = session.query(SimplePushSQL).filter_by(chid=chid,
                                                          uaid=uaid).first()
-            rec.state=0
-            #rec.delete()
-            session.commit()
+            if rec:
+                rec.state = 0
+                #rec.delete()
+                session.commit()
         except Exception, e:
             import pdb; pdb.set_trace();
             logger.error(str(e))
@@ -163,6 +165,8 @@ class Storage(StorageBase):
             raise StorageException('No UserAgentID specified')
         if data is None or len(data) == 0:
             raise StorageException('No Data specified')
+        if self._uaid_is_known(uaid):
+            raise StorageException('Already Loaded Data')
         try:
             session = self.Session()
             digest = []
@@ -191,6 +195,10 @@ class Storage(StorageBase):
         except Exception, e:
             import pdb; pdb.set_trace()
             logger.error(str(e))
+
+    def _uaid_is_known(self, uaid):
+        return self.Session().query(SimplePushSQL).filter_by(
+                uaid=uaid).first() is not None
 
     def purge(self):
         session = self.Session()

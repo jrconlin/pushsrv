@@ -27,16 +27,6 @@ def handleSigTerm():
 signal.signal(signal.SIGTERM, handleSigTerm)
 
 logger = None
-safeMode = True
-safeLength = 60
-safeStart = time.time()
-if os.path.exists('.safe_shutdown'):
-    safeMode = False
-    try:
-        os.unlink('.safe_shutdown')
-    except:
-        pass
-
 
 def get_group(group_name, dictionary):
     if group_name is None:
@@ -80,10 +70,10 @@ def self_diag(config):
         raise Exception('Failing self diagnostic.')
 
 
-def inRecovery():
-    if time.time() > safeStart + safeLength:
-        safeMode = False
-    return safeMode
+def inRecovery(safe):
+    if time.time() > safe.get('start') + safe.get('length'):
+        safe['mode'] = False
+    return safe['mode']
 
 
 def main(global_config, **settings):
@@ -97,7 +87,17 @@ def main(global_config, **settings):
     logger = Logging(config, global_config['__file__'])
     # Set in recovery if app has not been running that long.
     config.registry['recovery'] = inRecovery
-    import pdb; pdb.set_trace()
+    safeMode = True
+    if os.path.exists('.safe_shutdown'):
+        # Dirty "Safe Mode" check. Should match pid, but meh.
+        safeMode = False
+        try:
+            os.unlink('.safe_shutdown')
+        except:
+            pass
+    config.registry['safe'] = {'start': time.time(),
+                               'length': 60,
+                               'mode': safeMode}
     config.registry['storage'] = _resolve_name(settings.get('db.backend',
                                            '.storage.storage.Storage'))(config)
     config.registry['logger'] = logger

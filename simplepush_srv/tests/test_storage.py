@@ -1,4 +1,5 @@
-from simplepush_srv.storage.storage import Storage, SimplePushSQL
+from simplepush_srv.storage.storage import (Storage, SimplePushSQL,
+                                            StorageException)
 from . import TConfig, FakeLogger
 import time
 import unittest2
@@ -63,7 +64,7 @@ class TestStorage(unittest2.TestCase):
                 FakeLogger())
         self.assertEqual(data, 'aaa,bbb')
         #TODO: check that subsequent updates are rejected.
-        data2 = self.storage.reload_data('111',
-                [{'channelID': 'ccc', 'version': '7'}],
-                FakeLogger())
-        self.assertFalse(data2)
+        with self.assertRaises(StorageException):
+            self.storage.reload_data('111',
+                                     [{'channelID': 'ccc', 'version': '7'}],
+                                     FakeLogger())

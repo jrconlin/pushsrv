@@ -2,7 +2,8 @@ from . import TConfig, FakeLogger, Request
 from pyramid import testing
 from simplepush_srv import views
 from simplepush_srv.storage.storage import Storage, SimplePushSQL
-from pyramid.httpexceptions as http
+import json
+import pyramid.httpexceptions as http
 import unittest2
 import time
 
@@ -41,6 +42,9 @@ class TestViews(unittest2.TestCase):
         request.registry = Reg(settings=self.config.get_settings())
         request.registry['storage'] = self.storage
         request.registry['logger'] = self.logger
+        request.registry['safe'] = kw.get('safe') or {'start': time.time(),
+                                                      'length': 60,
+                                                      'mode': False}
         if matchdict:
             request.matchdict.update(matchdict)
         return request
@@ -57,6 +61,7 @@ class TestViews(unittest2.TestCase):
         self.storage.purge()
 
     def test_get_register(self):
+        self.load()
         response = views.get_register(self.req())
         assert('uaid' in response)
         assert('channelID' in response)
@@ -67,25 +72,55 @@ class TestViews(unittest2.TestCase):
         assert(response['channelID'] != response2['channelID'])
 
     def test_del_chid(self):
+        self.load()
         self.assertRaises(http.HTTPForbidden, views.del_chid, self.req())
         self.assertRaises(http.HTTPNotFound, views.del_chid,
                           self.req(headers={'X-UserAgent-ID': 'aaa'}))
         response = views.del_chid(self.req(headers={'X-UserAgent-ID': '111'},
                                            matchdict={'chid': 'aaa'}))
-        import pdb; pdb.set_trace()
-        print response
+        assert(response == {})
 
     def test_get_update(self):
+        self.load()
         self.assertRaises(http.HTTPForbidden, views.get_update, self.req())
-        respose = views.get_update(self.req(headers={'X-UserAgent-ID': '111'}))
-        import pdb; pdb.set_trace()
-        print response
-
+        response = views.get_update(self.req(headers={'X-UserAgent-ID':
+                                                      '111'}))
+        assert('exp' in response.get('expired'))
+        assert(response['digest'] == 'aaa,bbb')
+        assert('channelID' in response['updates'][0])
+        assert('version' in response['updates'][0])
         self.assertRaises(http.HTTPGone, views.get_update,
-                self.req(headers={'X-UserAgent-ID': '666'}))
+                          self.req(headers={'X-UserAgent-ID': '666'}))
 
     def test_post_update(self):
-        # TODO: finish
+        restore = [{'channelID': 'aaa', 'version': '5'},
+                   {'channelID': 'bbb', 'version': '6'}]
+        self.assertRaises(http.HTTPForbidden, views.post_update, self.req())
+        response = views.post_update(self.req(headers={'X-UserAgent-ID':
+                                                       '111',
+                                                       'Content-Type':
+                                                       'application/json'},
+                                              body=json.dumps(restore)))
+        assert(response.get('digest'), 'aaa,bbb')
+        self.assertRaises(http.HTTPGone, views.post_update,
+                          self.req(headers={'X-UserAgent-ID': '111'},
+                                   body=json.dumps(restore)))
 
     def test_channel_update(self):
-        # TODO finish
+        self.load()
+        response = views.channel_update(self.req(matchdict={'chid': 'aaa'},
+                                                 post={'version': '9'}))
+        assert(response == {})
+        self.assertRaises(http.HTTPServiceUnavailable, views.channel_update,
+                          self.req(matchdict={'chid': 'zzz'},
+                                   post={'version': '9'},
+                                   safe={'mode': True,
+                                         'start': time.time(),
+                                         'length': 60}))
+        self.assertRaises(http.HTTPNotFound, views.channel_update,
+                          self.req(matchdict={'chid': 'zzz'},
+                                   post={'version': '9'},
+                                   safe={'mode': False,
+                                         'start': time.time(),
+                                         'length': 60}))
+
