@@ -19,7 +19,7 @@ register = Service(name='register',
 update = Service(name='update',
                  path='/v%s/update' % api_version,
                  description='Update info',
-                 accept=['X-UserAgent-ID'])
+                 accept=['X-UserAgent-ID', 'If-Modified-Since'])
 updatech = Service(name='updatech',
                    path='/v%s/update/{chid}' % api_version,
                    description='Update channel',
