@@ -19,3 +19,6 @@ test:
 
 run:
 	$(PS) $(APPNAME)-local.ini
+
+fl:
+	`FL_CONF_DIR = ./fl bin/python fl/test_simple.py`

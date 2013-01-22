@@ -1,0 +1,13 @@
+# The following are system dependencies. Please use your system installer
+# of choice to load these:
+gcc
+gcc-c++
+python-devel
+screen
+git
+make
+mysql
+mysql-devel
+python-virtualenv
+# If virtualenv is not available, you may install it using the following:
+# sudo easy_install virtualenv

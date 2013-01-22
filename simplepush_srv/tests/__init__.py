@@ -1,5 +1,7 @@
+from pprint import pprint
 from pyramid import testing
 import json
+
 
 class TConfig:
 
@@ -12,14 +14,21 @@ class TConfig:
 
 class FakeLogger:
 
-    def error(self, s):
-        self.log(s)
+    def error(self, msg=None, **kw):
+        kw.update({'msg': msg})
+        self.log(kw)
 
-    def warn(self, s):
-        self.log(s)
+    def warn(self, msg=None, **kw):
+        kw.update({'msg': msg})
+        self.log(kw)
 
-    def log(self, s):
-        #print s
+    def debug(self, msg=None, **kw):
+        kw.update({'msg': msg})
+        self.log(kw)
+
+    def log(self, msg=None, **kw):
+        kw.update({'msg': msg})
+        #pprint(kw)
         pass
 
 

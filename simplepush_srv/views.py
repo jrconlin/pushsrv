@@ -2,6 +2,7 @@ from . import LOG, inRecovery
 from .storage.storage import Storage
 from mako.template import Template
 from mozsvc.metrics import Service
+from utils import get_last_accessed
 from webob import Response
 import json
 import os
@@ -12,14 +13,17 @@ import uuid
 api_version = 1
 
 register = Service(name='register',
-                   path='/v%s/register' % api_version,
-                   description='Register new')
+                   path='/v%s/register/{chid}' % api_version,
+                   description='Register new',
+                   accept=['X-UserAgent-ID'])
 update = Service(name='update',
                  path='/v%s/update' % api_version,
-                 description='Update info')
-updatech = Service(name='update',
+                 description='Update info',
+                 accept=['X-UserAgent-ID'])
+updatech = Service(name='updatech',
                    path='/v%s/update/{chid}' % api_version,
-                   description='Update channel')
+                   description='Update channel',
+                   accept=['X-UserAgent-ID'])
 item = Service(name='item',
                path='/v%s/{chid}' % api_version,
                description='item specific actions')
@@ -36,7 +40,7 @@ def get_register(request):
     storage = request.registry.get('storage')
     logger = request.registry.get('logger')
     uaid = request.headers.get('X-UserAgent-ID', gen_token(request))
-    chid = gen_token(request)
+    chid = request.matchdict.get('chid', gen_token(request))
     if storage.register_chid(uaid, chid, logger):
         return {'channelID': chid, 'uaid': uaid}
     else:
@@ -67,7 +71,8 @@ def get_update(request):
         raise http.HTTPForbidden()
     storage = request.registry.get('storage')
     logger = request.registry.get('logger')
-    updates = storage.get_updates(uaid, logger)
+    last_accessed = get_last_accessed(request)
+    updates = storage.get_updates(uaid, last_accessed, logger)
     if updates is None:
         raise http.HTTPGone  # 410
     if updates is False:

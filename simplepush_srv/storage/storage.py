@@ -2,7 +2,7 @@ import time
 import warnings
 from . import StorageBase, StorageException
 from .. import logger, LOG, inRecovery
-from sqlalchemy import (Column, Integer, String,
+from sqlalchemy import (Column, Index, Integer, String,
                         create_engine, MetaData, text)
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import scoped_session, sessionmaker
@@ -12,8 +12,10 @@ Base = declarative_base()
 
 class SimplePushSQL(Base):
     __tablename__ = 'simplepush'
-
-    chid = Column('chid', String(25), primary_key=True, unique=True)
+    ## this should be a multi-column index. No idea how to do that
+    ## cleanly in SQLAlchemy's ORM.
+    pk = Column('pk', String(51), primary_key=True, unique=True)
+    chid = Column('chid', String(25), index=True)
     uaid = Column('uaid', String(25), index=True)
     vers = Column('version', String(255), nullable=True)
     last = Column('last_accessed', Integer, index=True)
@@ -57,12 +59,16 @@ class Storage(StorageBase):
                        type='error', severity=LOG.EMERGENCY)
             raise e
 
+    def pk(self, uaid, chid):
+        return '%s.%s' % (uaid, chid)
+
     def health_check(self):
         try:
             healthy = True
             session = self.Session()
             import pdb; pdb.set_trace()
-            sp = SimplePushSQL(chid='test', uaid='test',
+            sp = SimplePushSQL(pk = self.pk('test','test'),
+                               chid='test', uaid='test',
                                vers=0, last=int(time.time()))
             session.commit()
             sp = self.session.query(SimplePushSQL).filter_by(chid='test')
@@ -85,15 +91,16 @@ class Storage(StorageBase):
                 session.commit()
                 return True
         except Exception, e:
-            import pdb; pdb.set_trace()
             logger.warn(str(e))
+            raise e
         return False
 
     def register_chids(self, uaid, pairs, logger):
         try:
             session = self.Session()
             for pair in pairs:
-                session.add(SimplePushSQL(chid=pair['channelID'],
+                session.add(SimplePushSQL(pk=self.pk(uaid, pair['channelID']),
+                                          chid=pair['channelID'],
                                           uaid=uaid,
                                           vers=pair['version'],
                                           last=int(time.time())))
@@ -109,7 +116,7 @@ class Storage(StorageBase):
             return False
         try:
             self.register_chids(uaid, [{'channelID': chid,
-                                 'version': None}], logger)
+                                        'version': None}], logger)
         except Exception, e:
             import pdb; pdb.set_trace()
             logger.error(str(e))
@@ -121,8 +128,8 @@ class Storage(StorageBase):
             return False
         try:
             session = self.Session()
-            rec = session.query(SimplePushSQL).filter_by(chid=chid,
-                                                         uaid=uaid).first()
+            rec = session.query(SimplePushSQL).filter_by(pk=self.pk(uaid,
+                                                         chid)).first()
             if rec:
                 rec.state = 0
                 #rec.delete()
@@ -133,14 +140,17 @@ class Storage(StorageBase):
             return False
         return True
 
-    def get_updates(self, uaid, logger):
+    def get_updates(self, uaid, last_accessed=None, logger=None):
         if uaid is None:
             raise StorageException('No UserAgentID provided')
         try:
-            session = self.Session()
-            records = session.query(SimplePushSQL).filter_by(uaid=uaid)
-            if records.count() == 0:
-                return None
+            sql = ('select chid, version, state from ' +
+                   'simplepush where uaid=:uaid')
+            params = {'uaid': uaid}
+            if last_accessed:
+                sql += ' and last_accessed >= :last'
+                params['last'] = last_accessed
+            records = self.engine.execute(text(sql), **dict(params))
             digest = []
             updates = []
             expired = []
@@ -148,15 +158,19 @@ class Storage(StorageBase):
                 if record.state:
                     digest.append(record.chid)
                     updates.append({'channelID': record.chid,
-                                    'version': record.vers})
+                                    'version': record.version})
                 else:
                     expired.append(record.chid)
-            return {'digest': ','.join(digest),
-                    'updates': updates,
-                    'expired': expired}
+            if len(updates):
+                return {'digest': ','.join(digest),
+                        'updates': updates,
+                        'expired': expired}
+            return None
         except Exception, e:
             import pdb; pdb.set_trace();
-            logger.error(str(e))
+            if logger:
+                logger.error(str(e))
+            raise e
         return False
 
     def reload_data(self, uaid, data, logger):
@@ -173,7 +187,9 @@ class Storage(StorageBase):
             if session.query(SimplePushSQL).filter_by(uaid=uaid).count():
                 return False
             for datum in data:
-                session.add(SimplePushSQL(chid=datum.get('channelID'),
+                chid = datum.get('channelID')
+                session.add(SimplePushSQL(pk=self.pk(uaid, chid),
+                                          chid=chid,
                                           uaid=uaid,
                                           vers=datum.get('version')))
                 digest.append(datum.get('channelID'))

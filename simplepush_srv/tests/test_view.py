@@ -17,7 +17,9 @@ class TestViews(unittest2.TestCase):
                 {'channelID': 'ccc', 'uaid': '222', 'version': 2}]
         session = self.storage.Session()
         for datum in data:
-            session.add(SimplePushSQL(chid=datum['channelID'],
+            pk = '%s.%s' % (datum['uaid'], datum['channelID'])
+            session.add(SimplePushSQL(pk=pk,
+                                      chid=datum['channelID'],
                                       uaid=datum['uaid'],
                                       vers=datum['version'],
                                       last=time.time(),
