@@ -42,7 +42,7 @@ def get_register(request):
     chid = request.matchdict.get('chid', gen_token(request))
     if storage.register_chid(uaid, chid, logger):
         return {'channelID': chid, 'uaid': uaid,
-                'pushEndpoint': '%s:%s/v%s/update/%s' % (
+                'pushEndpoint': '%s://%s/v%s/update/%s' % (
                         request.environ.get('wsgi.url_scheme'),
                         request.environ.get('HTTP_HOST'),
                         api_version,
