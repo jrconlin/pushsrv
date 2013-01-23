@@ -16,6 +16,10 @@ register = Service(name='register',
                    path='/v%s/register/{chid}' % api_version,
                    description='Register new',
                    accept=['X-UserAgent-ID'])
+registern = Service(name='registern',
+                    path='/v%s/register/' % api_version,
+                    description='Register New no chid',
+                    accept=['X-UserAgent-ID'])
 update = Service(name='update',
                  path='/v%s/update' % api_version,
                  description='Update info',
@@ -34,6 +38,7 @@ def gen_token(request):
     return base
 
 
+@registern.get()
 @register.get()
 def get_register(request):
     """ Return a new channelID (and possibly a user agent) """

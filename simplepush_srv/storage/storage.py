@@ -1,8 +1,8 @@
 import time
 import warnings
 from . import StorageBase, StorageException
-from .. import logger, LOG, inRecovery
-from sqlalchemy import (Column, Index, Integer, String,
+from .. import logger, LOG
+from sqlalchemy import (Column, Integer, String,
                         create_engine, MetaData, text)
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import scoped_session, sessionmaker
@@ -24,6 +24,9 @@ class SimplePushSQL(Base):
 
 class Storage(StorageBase):
     __database__ = 'simplepush'
+    DELETED = 0
+    LIVE = 1
+    REGISTERED = 2
 
     def __init__(self, config, **kw):
         try:
@@ -66,8 +69,7 @@ class Storage(StorageBase):
         try:
             healthy = True
             session = self.Session()
-            import pdb; pdb.set_trace()
-            sp = SimplePushSQL(pk = self.pk('test','test'),
+            sp = SimplePushSQL(pk=self.pk('test', 'test'),
                                chid='test', uaid='test',
                                vers=0, last=int(time.time()))
             session.commit()
@@ -83,10 +85,12 @@ class Storage(StorageBase):
             return False
         session = self.Session()
         try:
-            rec = session.query(SimplePushSQL).filter_by(chid=chid,
-                                                         state=1).first()
+            rec = session.query(SimplePushSQL)\
+                .filter(SimplePushSQL.chid == chid,
+                        SimplePushSQL.state != self.DELETED).first()
             if (rec):
                 rec.vers = vers
+                rec.state = self.LIVE
                 rec.last = int(time.time())
                 session.commit()
                 return True
@@ -102,11 +106,11 @@ class Storage(StorageBase):
                 session.add(SimplePushSQL(pk=self.pk(uaid, pair['channelID']),
                                           chid=pair['channelID'],
                                           uaid=uaid,
+                                          state=self.REGISTERED,
                                           vers=pair['version'],
                                           last=int(time.time())))
             session.commit()
         except Exception, e:
-            import pdb; pdb.set_trace()
             logger.error(str(e))
             return False
         return True
@@ -118,7 +122,6 @@ class Storage(StorageBase):
             self.register_chids(uaid, [{'channelID': chid,
                                         'version': None}], logger)
         except Exception, e:
-            import pdb; pdb.set_trace()
             logger.error(str(e))
             return False
         return True
@@ -131,11 +134,10 @@ class Storage(StorageBase):
             rec = session.query(SimplePushSQL).filter_by(pk=self.pk(uaid,
                                                          chid)).first()
             if rec:
-                rec.state = 0
+                rec.state = self.DELETED
                 #rec.delete()
                 session.commit()
         except Exception, e:
-            import pdb; pdb.set_trace();
             logger.error(str(e))
             return False
         return True
@@ -167,7 +169,6 @@ class Storage(StorageBase):
                         'expired': expired}
             return None
         except Exception, e:
-            import pdb; pdb.set_trace();
             if logger:
                 logger.error(str(e))
             raise e

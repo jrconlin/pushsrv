@@ -28,6 +28,7 @@ signal.signal(signal.SIGTERM, handleSigTerm)
 
 logger = None
 
+
 def get_group(group_name, dictionary):
     if group_name is None:
         return dictionary
