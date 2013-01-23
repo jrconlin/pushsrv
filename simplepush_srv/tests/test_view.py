@@ -67,6 +67,7 @@ class TestViews(unittest2.TestCase):
         response = views.get_register(self.req())
         assert('uaid' in response)
         assert('channelID' in response)
+        assert('pushEndpoint' in response)
         assert(response['uaid'] != response['channelID'])
         response2 = views.get_register(self.req(headers={'X-UserAgent-ID':
             response['uaid']}))

@@ -1,13 +1,7 @@
-from . import LOG, inRecovery
-from .storage.storage import Storage
-from mako.template import Template
+from . import inRecovery
 from mozsvc.metrics import Service
 from utils import get_last_accessed
-from webob import Response
-import json
-import os
 import pyramid.httpexceptions as http
-import time
 import uuid
 
 api_version = 1
@@ -47,7 +41,12 @@ def get_register(request):
     uaid = request.headers.get('X-UserAgent-ID', gen_token(request))
     chid = request.matchdict.get('chid', gen_token(request))
     if storage.register_chid(uaid, chid, logger):
-        return {'channelID': chid, 'uaid': uaid}
+        return {'channelID': chid, 'uaid': uaid,
+                'pushEndpoint': '%s:%s/v%s/update/%s' % (
+                        request.environ.get('wsgi.url_scheme'),
+                        request.environ.get('HTTP_HOST'),
+                        api_version,
+                        chid)}
     else:
         raise http.HTTPServerError('Could not register channel')
 
