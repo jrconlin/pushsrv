@@ -76,7 +76,6 @@ def del_chid(request):
 @update.get()
 def get_update(request):
     """ Return list of known CHIDs & versions for a UAID """
-    import pdb; pdb.set_trace()
     uaid = request.headers.get('X-UserAgent-ID')
     if not uaid:
         raise http.HTTPForbidden()  # 403
