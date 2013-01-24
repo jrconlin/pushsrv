@@ -2,7 +2,6 @@ import time
 import warnings
 from . import StorageBase, StorageException
 from .. import logger, LOG
-from flags import SimplePushFlags
 from sqlalchemy import (Column, Integer, String,
                         create_engine, MetaData, text)
 from sqlalchemy.ext.declarative import declarative_base
@@ -28,13 +27,12 @@ class Storage(StorageBase):
     LIVE = 1
     REGISTERED = 2
 
-    def __init__(self, config, **kw):
+    def __init__(self, config, flags, **kw):
         try:
             super(Storage, self).__init__(config, **kw)
             self.metadata = MetaData()
             self._connect()
-            self.flags = SimplePushFlags(**dict(config.settings.get('redis',
-                                                 {'host': 'localhost'})))
+            self.flags = flags
             #TODO: add the most common index.
         except Exception, e:
             logger.log(msg='Could not initialize Storage "%s"' % str(e),

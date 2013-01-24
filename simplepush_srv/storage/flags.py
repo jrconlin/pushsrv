@@ -4,7 +4,7 @@ from . import StorageBase
 
 class SimplePushFlags(StorageBase):
 
-    def __init__(self, **kw):
+    def __init__(self, config, **kw):
         self.redis = redis.StrictRedis(**kw)
 
     def get(self, key, default=None):

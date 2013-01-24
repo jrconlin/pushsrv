@@ -70,10 +70,11 @@ def main(global_config, **settings):
     config.scan(".views")
     logger = Logging(config, global_config['__file__'])
     # Set in recovery if app has not been running that long.
-    config.registry['storage'] = _resolve_name(settings.get('db.backend',
-                                           '.storage.storage.Storage'))(config)
-    config.registry['flags'] = _resolve_name(settings.get('flags.backend',
+    flags = _resolve_name(settings.get('flags.backend',
                                      '.storage.flags.SimplePushFlags'))(config)
+    config.registry['flags'] = flags
+    config.registry['storage'] = _resolve_name(settings.get('db.backend',
+                                    '.storage.storage.Storage'))(config, flags)
     config.registry['logger'] = logger
     if settings.get('dbg.self_diag', False):
         self_diag(config)
