@@ -33,6 +33,7 @@ pyramid
 pyramid-beaker
 python-dateutil
 pyzmq
+redis
 repoze.lru
 repoze.who
 repoze.who.plugins.browserid

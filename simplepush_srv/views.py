@@ -1,7 +1,7 @@
-from . import inRecovery
 from mozsvc.metrics import Service
 from utils import get_last_accessed
 import pyramid.httpexceptions as http
+import time
 import uuid
 
 api_version = 1
@@ -37,8 +37,11 @@ def gen_token(request):
 def get_register(request):
     """ Return a new channelID (and possibly a user agent) """
     storage = request.registry.get('storage')
-    logger = request.registry.get('logger')
     uaid = request.headers.get('X-UserAgent-ID', gen_token(request))
+    flags = request.registry.get('flags')
+    if flags.get('recovery') and not storage._uaid_is_known(uaid):
+        raise http.HTTPGone()
+    logger = request.registry.get('logger')
     chid = request.matchdict.get('chid', gen_token(request))
     if storage.register_chid(uaid, chid, logger):
         return {'channelID': chid, 'uaid': uaid,
@@ -48,7 +51,7 @@ def get_register(request):
                         api_version,
                         chid)}
     else:
-        raise http.HTTPServerError('Could not register channel')
+        raise http.HTTPConflict()
 
 
 @item.delete()
@@ -58,10 +61,13 @@ def del_chid(request):
     logger = request.registry.get('logger')
     uaid = request.headers.get('X-UserAgent-ID')
     chid = request.matchdict.get('chid')
+    flags = request.registry.get('flags')
+    if flags.get('recovery') and not storage._uaid_is_known(uaid):
+        raise http.HTTPGone() # 410
     if uaid is None:
-        raise http.HTTPForbidden()
+        raise http.HTTPForbidden() #403
     if chid is None:
-        raise http.HTTPNotFound
+        raise http.HTTPForbidden() #403
     if not storage.delete_chid(uaid, chid, logger):
         raise http.HTTPServerError("Delete Failure")
     return {}
@@ -72,15 +78,15 @@ def get_update(request):
     """ Return list of known CHIDs & versions for a UAID """
     uaid = request.headers.get('X-UserAgent-ID')
     if not uaid:
-        raise http.HTTPForbidden()
+        raise http.HTTPForbidden()  # 403
     storage = request.registry.get('storage')
     logger = request.registry.get('logger')
     last_accessed = get_last_accessed(request)
     updates = storage.get_updates(uaid, last_accessed, logger)
     if updates is None:
-        raise http.HTTPGone  # 410
+        raise http.HTTPGone()  # 410
     if updates is False:
-        raise http.HTTPServerError('crapstix')
+        raise http.HTTPServerError()
     else:
         return updates
 
@@ -107,7 +113,7 @@ def post_update(request):
 def channel_update(request):
     version = request.GET.get('version', request.POST.get('version'))
     if version is None:
-        raise http.HTTPNoContent
+        raise http.HTTPForbidden # 403
     storage = request.registry.get('storage')
     logger = request.registry.get('logger')
     chid = request.matchdict.get('chid')
@@ -115,11 +121,14 @@ def channel_update(request):
         if storage.update_chid(chid, version, logger):
             return {}
         else:
-            if inRecovery(request.registry['safe']):
-                # add retry period?
-                raise http.HTTPServiceUnavailable()
+            flags = request.registry.get('flags')
+            recovery = flags.get('recovery')
+            if recovery:
+                if time.time() > recovery:
+                    flags.delete('recovery')
+                raise http.HTTPServiceUnavailable()  # 503
             else:
-                raise http.HTTPNotFound()
+                raise http.HTTPNotFound() # 404
     except Exception, e:
         logger.error(str(e))
         raise e

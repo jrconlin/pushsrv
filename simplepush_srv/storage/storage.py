@@ -2,6 +2,7 @@ import time
 import warnings
 from . import StorageBase, StorageException
 from .. import logger, LOG
+from flags import SimplePushFlags
 from sqlalchemy import (Column, Integer, String,
                         create_engine, MetaData, text)
 from sqlalchemy.ext.declarative import declarative_base
@@ -14,8 +15,7 @@ class SimplePushSQL(Base):
     __tablename__ = 'simplepush'
     ## this should be a multi-column index. No idea how to do that
     ## cleanly in SQLAlchemy's ORM.
-    pk = Column('pk', String(51), primary_key=True, unique=True)
-    chid = Column('chid', String(25), index=True)
+    chid = Column('chid', String(25), primary_key=True, unique=True)
     uaid = Column('uaid', String(25), index=True)
     vers = Column('version', String(255), nullable=True)
     last = Column('last_accessed', Integer, index=True)
@@ -33,6 +33,8 @@ class Storage(StorageBase):
             super(Storage, self).__init__(config, **kw)
             self.metadata = MetaData()
             self._connect()
+            self.flags = SimplePushFlags(**dict(config.settings.get('redis',
+                                                 {'host': 'localhost'})))
             #TODO: add the most common index.
         except Exception, e:
             logger.log(msg='Could not initialize Storage "%s"' % str(e),
@@ -62,15 +64,11 @@ class Storage(StorageBase):
                        type='error', severity=LOG.EMERGENCY)
             raise e
 
-    def pk(self, uaid, chid):
-        return '%s.%s' % (uaid, chid)
-
     def health_check(self):
         try:
             healthy = True
             session = self.Session()
-            sp = SimplePushSQL(pk=self.pk('test', 'test'),
-                               chid='test', uaid='test',
+            sp = SimplePushSQL(chid='test', uaid='test',
                                vers=0, last=int(time.time()))
             session.commit()
             sp = self.session.query(SimplePushSQL).filter_by(chid='test')
@@ -103,8 +101,7 @@ class Storage(StorageBase):
         try:
             session = self.Session()
             for pair in pairs:
-                session.add(SimplePushSQL(pk=self.pk(uaid, pair['channelID']),
-                                          chid=pair['channelID'],
+                session.add(SimplePushSQL(chid=pair['channelID'],
                                           uaid=uaid,
                                           state=self.REGISTERED,
                                           vers=pair['version'],
@@ -131,8 +128,8 @@ class Storage(StorageBase):
             return False
         try:
             session = self.Session()
-            rec = session.query(SimplePushSQL).filter_by(pk=self.pk(uaid,
-                                                         chid)).first()
+            rec = session.query(SimplePushSQL).filter_by(uaid=uaid,
+                                                         chid=chid).first()
             if rec:
                 rec.state = self.DELETED
                 #rec.delete()
@@ -189,8 +186,7 @@ class Storage(StorageBase):
                 return False
             for datum in data:
                 chid = datum.get('channelID')
-                session.add(SimplePushSQL(pk=self.pk(uaid, chid),
-                                          chid=chid,
+                session.add(SimplePushSQL(chid=chid,
                                           uaid=uaid,
                                           vers=datum.get('version')))
                 digest.append(datum.get('channelID'))
@@ -216,6 +212,13 @@ class Storage(StorageBase):
     def _uaid_is_known(self, uaid):
         return self.Session().query(SimplePushSQL).filter_by(
                 uaid=uaid).first() is not None
+
+    def _gc(self, settings):
+        if self.flags.get('recovery'):
+            return
+        now = time.time()
+        # delete all records marked deleted that are older than db.clean.deleted
+        # delete all records that are unused older than db.clean.unused
 
     def purge(self):
         session = self.Session()

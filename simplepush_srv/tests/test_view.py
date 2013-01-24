@@ -2,6 +2,7 @@ from . import TConfig, FakeLogger, Request
 from pyramid import testing
 from simplepush_srv import views
 from simplepush_srv.storage.storage import Storage, SimplePushSQL
+from simplepush_srv.storage.flags import SimplePushFlags
 import json
 import pyramid.httpexceptions as http
 import unittest2
@@ -17,9 +18,7 @@ class TestViews(unittest2.TestCase):
                 {'channelID': 'ccc', 'uaid': '222', 'version': 2}]
         session = self.storage.Session()
         for datum in data:
-            pk = '%s.%s' % (datum['uaid'], datum['channelID'])
-            session.add(SimplePushSQL(pk=pk,
-                                      chid=datum['channelID'],
+            session.add(SimplePushSQL(chid=datum['channelID'],
                                       uaid=datum['uaid'],
                                       vers=datum['version'],
                                       last=time.time(),
@@ -27,6 +26,11 @@ class TestViews(unittest2.TestCase):
         session.commit()
 
     def req(self, matchdict={}, user_id=None, headers=None, **kw):
+
+        class FakeFlags(dict):
+
+            def delete(self, key):
+                del(self[key])
 
         class Reg(dict):
 
@@ -47,6 +51,7 @@ class TestViews(unittest2.TestCase):
         request.registry['safe'] = kw.get('safe') or {'start': time.time(),
                                                       'length': 60,
                                                       'mode': False}
+        request.registry['flags'] = FakeFlags(**kw.get('flags', {}))
         if matchdict:
             request.matchdict.update(matchdict)
         return request
@@ -77,7 +82,7 @@ class TestViews(unittest2.TestCase):
     def test_del_chid(self):
         self.load()
         self.assertRaises(http.HTTPForbidden, views.del_chid, self.req())
-        self.assertRaises(http.HTTPNotFound, views.del_chid,
+        self.assertRaises(http.HTTPForbidden, views.del_chid,
                           self.req(headers={'X-UserAgent-ID': 'aaa'}))
         response = views.del_chid(self.req(headers={'X-UserAgent-ID': '111'},
                                            matchdict={'chid': 'aaa'}))
@@ -119,11 +124,14 @@ class TestViews(unittest2.TestCase):
                                    post={'version': '9'},
                                    safe={'mode': True,
                                          'start': time.time(),
-                                         'length': 60}))
+                                         'length': 60},
+                                   flags={'recovery': time.time()}
+                                   ))
         self.assertRaises(http.HTTPNotFound, views.channel_update,
                           self.req(matchdict={'chid': 'zzz'},
                                    post={'version': '9'},
                                    safe={'mode': False,
                                          'start': time.time(),
-                                         'length': 60}))
+                                         'length': 60},
+                                   ))
 

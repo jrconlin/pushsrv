@@ -4,27 +4,16 @@
 """Main entry point
 """
 
-from .constants import APP
 from .logger import Logging
 from .resources import Root
+
+from .storage.flags import SimplePushFlags
+
 from pyramid.config import Configurator
 from mozsvc.config import load_into_settings
 from mozsvc.middlewares import _resolve_name
 
-import os
-import signal
 import time
-
-
-def handleSigTerm():
-    try:
-        # touch the .safe_shutdown file
-        import pdb; pdb.set_trace()
-        open('.safe_shutdown', 'w').close()
-    except:
-        pass
-
-signal.signal(signal.SIGTERM, handleSigTerm)
 
 logger = None
 
@@ -71,12 +60,6 @@ def self_diag(config):
         raise Exception('Failing self diagnostic.')
 
 
-def inRecovery(safe):
-    if time.time() > safe.get('start') + safe.get('length'):
-        safe['mode'] = False
-    return safe['mode']
-
-
 def main(global_config, **settings):
     global logger
     load_into_settings(global_config['__file__'], settings)
@@ -87,20 +70,10 @@ def main(global_config, **settings):
     config.scan(".views")
     logger = Logging(config, global_config['__file__'])
     # Set in recovery if app has not been running that long.
-    config.registry['recovery'] = inRecovery
-    safeMode = True
-    if os.path.exists('.safe_shutdown'):
-        # Dirty "Safe Mode" check. Should match pid, but meh.
-        safeMode = False
-        try:
-            os.unlink('.safe_shutdown')
-        except:
-            pass
-    config.registry['safe'] = {'start': time.time(),
-                               'length': 60,
-                               'mode': safeMode}
     config.registry['storage'] = _resolve_name(settings.get('db.backend',
                                            '.storage.storage.Storage'))(config)
+    config.registry['flags'] = _resolve_name(settings.get('flags.backend',
+                                     '.storage.flags.SimplePushFlags'))(config)
     config.registry['logger'] = logger
     if settings.get('dbg.self_diag', False):
         self_diag(config)
