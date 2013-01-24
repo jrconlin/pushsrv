@@ -14,8 +14,8 @@ class SimplePushSQL(Base):
     __tablename__ = 'simplepush'
     ## this should be a multi-column index. No idea how to do that
     ## cleanly in SQLAlchemy's ORM.
-    chid = Column('chid', String(25), primary_key=True, unique=True)
-    uaid = Column('uaid', String(25), index=True)
+    chid = Column('chid', String(34), primary_key=True, unique=True)
+    uaid = Column('uaid', String(34), index=True)
     vers = Column('version', String(255), nullable=True)
     last = Column('last_accessed', Integer, index=True)
     state = Column('state', Integer, default=1)
@@ -91,7 +91,9 @@ class Storage(StorageBase):
                 session.commit()
                 return True
         except Exception, e:
-            logger.warn(str(e))
+            warnings.warn(repr(e))
+            logger.log(msg="Uncaught error %s " % repr(e),
+                       type='error', severity=LOG.WARNING)
             raise e
         return False
 
@@ -106,7 +108,8 @@ class Storage(StorageBase):
                                           last=int(time.time())))
             session.commit()
         except Exception, e:
-            logger.error(str(e))
+            warnings.warn(repr(e))
+            logger.log(type='error', severity=LOG.ERROR, msg=repr(e))
             return False
         return True
 
@@ -117,7 +120,8 @@ class Storage(StorageBase):
             self.register_chids(uaid, [{'channelID': chid,
                                         'version': None}], logger)
         except Exception, e:
-            logger.error(str(e))
+            warnings.warn(repr(e))
+            logger.log(type='error', severity=LOG.WARN, msg=repr(e))
             return False
         return True
 
@@ -133,7 +137,8 @@ class Storage(StorageBase):
                 #rec.delete()
                 session.commit()
         except Exception, e:
-            logger.error(str(e))
+            warnings.warn(repr(e))
+            logger.log(type='error', severity=LOG.WARN, msg=repr(e))
             return False
         return True
 
@@ -164,8 +169,8 @@ class Storage(StorageBase):
                         'expired': expired}
             return None
         except Exception, e:
-            if logger:
-                logger.error(str(e))
+            warnings.warn(repr(e))
+            logger.log(type='error', severity=LOG.WARN, msg=repr(e))
             raise e
         return False
 
@@ -192,7 +197,8 @@ class Storage(StorageBase):
             return ",".join(digest)
         except Exception, e:
             import pdb; pdb.set_trace();
-            logger.error(str(e))
+            warnings.warn(repr(e))
+            logger.log(type='error', severity=LOG.WARN, msg=repr(e))
         return False
 
     def _get_record(self, chid):
@@ -205,7 +211,8 @@ class Storage(StorageBase):
             return result
         except Exception, e:
             import pdb; pdb.set_trace()
-            logger.error(str(e))
+            warnings.warn(repr(e))
+            logger.log(type='error', severity=LOG.WARN, msg=repr(e))
 
     def _uaid_is_known(self, uaid):
         return self.Session().query(SimplePushSQL).filter_by(
