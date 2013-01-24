@@ -15,7 +15,7 @@ registern = Service(name='registern',
                     description='Register New no chid',
                     accept=['X-UserAgent-ID'])
 update = Service(name='update',
-                 path='/v%s/update' % api_version,
+                 path='/v%s/update/' % api_version,
                  description='Update info',
                  accept=['X-UserAgent-ID', 'If-Modified-Since'])
 updatech = Service(name='updatech',
@@ -76,6 +76,7 @@ def del_chid(request):
 @update.get()
 def get_update(request):
     """ Return list of known CHIDs & versions for a UAID """
+    import pdb; pdb.set_trace()
     uaid = request.headers.get('X-UserAgent-ID')
     if not uaid:
         raise http.HTTPForbidden()  # 403
