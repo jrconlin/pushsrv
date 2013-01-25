@@ -1,7 +1,9 @@
+from . import LOG
 from mozsvc.metrics import Service
 from utils import get_last_accessed
 import pyramid.httpexceptions as http
 import time
+import traceback
 import uuid
 
 api_version = 1
@@ -46,10 +48,10 @@ def get_register(request):
     if storage.register_chid(uaid, chid, logger):
         return {'channelID': chid, 'uaid': uaid,
                 'pushEndpoint': '%s://%s/v%s/update/%s' % (
-                        request.environ.get('wsgi.url_scheme'),
-                        request.environ.get('HTTP_HOST'),
-                        api_version,
-                        chid)}
+                    request.environ.get('wsgi.url_scheme'),
+                    request.environ.get('HTTP_HOST'),
+                    api_version,
+                    chid)}
     else:
         raise http.HTTPConflict()
 
@@ -63,11 +65,11 @@ def del_chid(request):
     chid = request.matchdict.get('chid')
     flags = request.registry.get('flags')
     if flags.get('recovery') and not storage._uaid_is_known(uaid):
-        raise http.HTTPGone() # 410
+        raise http.HTTPGone()  # 410
     if uaid is None:
-        raise http.HTTPForbidden() #403
+        raise http.HTTPForbidden()  # 403
     if chid is None:
-        raise http.HTTPForbidden() #403
+        raise http.HTTPForbidden()  # 403
     if not storage.delete_chid(uaid, chid, logger):
         raise http.HTTPServerError("Delete Failure")
     return {}
@@ -105,7 +107,7 @@ def post_update(request):
         digest = storage.reload_data(uaid, data, logger)
         return {'digest': digest}
     except Exception, e:
-        logger.error(str(e))
+        logger.log(msg=traceback.format_exc(), type='error', severity=LOG.WARN)
         raise http.HTTPGone
 
 
@@ -113,7 +115,7 @@ def post_update(request):
 def channel_update(request):
     version = request.GET.get('version', request.POST.get('version'))
     if version is None:
-        raise http.HTTPForbidden # 403
+        raise http.HTTPForbidden  # 403
     storage = request.registry.get('storage')
     logger = request.registry.get('logger')
     chid = request.matchdict.get('chid')
@@ -128,8 +130,9 @@ def channel_update(request):
                     flags.delete('recovery')
                 raise http.HTTPServiceUnavailable()  # 503
             else:
-                raise http.HTTPNotFound() # 404
+                raise http.HTTPNotFound()  # 404
     except Exception, e:
-        logger.error(str(e))
+        logger.log(msg=traceback.format_exc(), type='error',
+                   severity=LOG.CRITICAL)
         raise e
 

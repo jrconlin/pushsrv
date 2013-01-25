@@ -153,21 +153,18 @@ class Storage(StorageBase):
                 sql += ' and last_accessed >= :last'
                 params['last'] = last_accessed
             records = self.engine.execute(text(sql), **dict(params))
-            digest = []
             updates = []
             expired = []
             for record in records:
                 if record.state:
-                    digest.append(record.chid)
                     updates.append({'channelID': record.chid,
                                     'version': record.version})
                 else:
                     expired.append(record.chid)
-            if len(updates):
-                return {'digest': ','.join(digest),
-                        'updates': updates,
-                        'expired': expired}
-            return None
+            if not len(updates) and self.flags.get('recovery'):
+                return None
+            return {'updates': updates,
+                    'expired': expired}
         except Exception, e:
             warnings.warn(repr(e))
             logger.log(type='error', severity=LOG.WARN, msg=repr(e))

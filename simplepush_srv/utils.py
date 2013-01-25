@@ -24,8 +24,8 @@ def get_last_accessed(request):
         if request.registry.get('logger'):
             ims_str = time.strftime('%a, %d %b %Y %H:%M:%S UTC',
                                     time.gmtime(last_accessed))
-            request.registry['logger'].debug('I-M-S: %s (%s)' % (ims_str,
-                last_accessed_str))
+        #    request.registry['logger'].log(msg='I-M-S: %s (%s)' % (ims_str,
+        #        last_accessed_str), type='debug', )
     except Exception, e:
         settings = request.registry.settings
         if settings.get('dbg.traceback', False):
