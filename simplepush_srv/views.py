@@ -19,11 +19,12 @@ registern = Service(name='registern',
 update = Service(name='update',
                  path='/v%s/update/' % api_version,
                  description='Update info',
-                 accept=['X-UserAgent-ID', 'If-Modified-Since'])
+                 accept=['X-UserAgent-ID', 'If-Modified-Since',
+                         'Content-Type'])
 updatech = Service(name='updatech',
                    path='/v%s/update/{chid}' % api_version,
                    description='Update channel',
-                   accept=['X-UserAgent-ID', 'Accept'])
+                   accept=['X-UserAgent-ID', 'Content-Type'])
 item = Service(name='item',
                path='/v%s/{chid}' % api_version,
                description='item specific actions')
@@ -116,6 +117,7 @@ def post_update(request):
 @updatech.put()
 def channel_update(request):
     version = request.GET.get('version', request.POST.get('version'))
+    import pdb; pdb.set_trace()
     if version is None:
         raise http.HTTPForbidden  # 403
     storage = request.registry.get('storage')
