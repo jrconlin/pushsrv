@@ -23,7 +23,7 @@ update = Service(name='update',
 updatech = Service(name='updatech',
                    path='/v%s/update/{chid}' % api_version,
                    description='Update channel',
-                   accept=['X-UserAgent-ID'])
+                   accept=['X-UserAgent-ID', 'Accept'])
 item = Service(name='item',
                path='/v%s/{chid}' % api_version,
                description='item specific actions')
@@ -34,8 +34,10 @@ def gen_token(request):
     return base
 
 
-@registern.get()
 @register.get()
+@register.put()
+@registern.get()
+@registern.put()
 def get_register(request):
     """ Return a new channelID (and possibly a user agent) """
     storage = request.registry.get('storage')
