@@ -3,6 +3,13 @@ from pyramid import testing
 import json
 
 
+class FakeFlags(dict):
+
+    def delete(self, key):
+        if key in self:
+            del self[key]
+
+
 class TConfig:
 
     def __init__(self, data):

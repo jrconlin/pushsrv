@@ -62,19 +62,23 @@ def self_diag(config):
 
 def main(global_config, **settings):
     global logger
-    load_into_settings(global_config['__file__'], settings)
     config = Configurator(root_factory=Root, settings=settings)
     config.include("cornice")
     config.include("pyramid_beaker")
     config.include("mozsvc")
     config.scan(".views")
-    logger = Logging(config, global_config['__file__'])
-    # Set in recovery if app has not been running that long.
-    flags = _resolve_name(settings.get('flags.backend',
-                                     '.storage.flags.SimplePushFlags'))(config)
+    if '__file__' in global_config:
+        load_into_settings(global_config['__file__'], settings)
+        logger = Logging(config, global_config['__file__'])
+        # Set in recovery if app has not been running that long.
+        flags = _resolve_name(settings.get('flags.backend',
+                       'simplepush_srv.storage.flags.SimplePushFlags'))(config)
+    else:
+        logger = settings['logger']
+        flags = settings['flags']
     config.registry['flags'] = flags
     config.registry['storage'] = _resolve_name(settings.get('db.backend',
-                                    '.storage.storage.Storage'))(config, flags)
+                      'simplepush_srv.storage.storage.Storage'))(config, flags)
     config.registry['logger'] = logger
     if settings.get('dbg.self_diag', False):
         self_diag(config)

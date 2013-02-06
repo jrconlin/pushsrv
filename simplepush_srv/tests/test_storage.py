@@ -25,7 +25,9 @@ class TestStorage(unittest2.TestCase):
                     {'channelID': 'ccc', 'uaid': '222', 'version': 2}]
         session = self.storage.Session()
         for datum in data:
-            session.add(SimplePushSQL(chid=datum['channelID'],
+            pk = "%s.%s" % (datum['uaid'], datum['channelID'])
+            session.add(SimplePushSQL(pk=pk,
+                                      chid=datum['channelID'],
                                       uaid=datum['uaid'],
                                       vers=datum['version'],
                                       last=datum.get('last_accessed'),
@@ -34,20 +36,20 @@ class TestStorage(unittest2.TestCase):
 
     def test_update_child(self):
         self.load()
-        self.storage.update_chid('aaa', 2, FakeLogger())
-        rec = self.storage._get_record('aaa')
+        self.storage.update_channel('111.aaa', 2, FakeLogger())
+        rec = self.storage._get_record('111.aaa')
         self.assertEqual(rec[0].get('vers'), '2')
 
     def test_register_chids(self):
         self.load()
         self.storage.register_chid('444', 'ddd', FakeLogger())
-        rec = self.storage._get_record('ddd')
+        rec = self.storage._get_record('444.ddd')
         self.assertEqual(rec[0].get('uaid'), '444')
 
     def test_delete_chid(self):
         self.load()
         self.storage.delete_chid('111', 'aaa', FakeLogger())
-        rec = self.storage._get_record('aaa')
+        rec = self.storage._get_record('111.aaa')
         self.assertEqual(len(rec), 1)
         self.assertEqual(rec[0].get('state'), 0)
 
@@ -56,7 +58,6 @@ class TestStorage(unittest2.TestCase):
         data = self.storage.get_updates('111', last_accessed=None,
                                         logger=FakeLogger())
         self.assertEqual(data.get('expired')[0], 'exp')
-        self.assertEqual(data.get('digest'), 'aaa,bbb')
         self.assertEqual(len(data.get('updates')), 2)
         data = self.storage.get_updates('111', last_accessed=20,
                                         logger=FakeLogger())

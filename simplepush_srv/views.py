@@ -10,21 +10,16 @@ api_version = 1
 
 register = Service(name='register',
                    path='/v%s/register/{chid}' % api_version,
-                   description='Register new',
-                   accept=['X-UserAgent-ID'])
+                   description='Register new')
 registern = Service(name='registern',
                     path='/v%s/register/' % api_version,
-                    description='Register New no chid',
-                    accept=['X-UserAgent-ID'])
+                    description='Register New no chid')
 update = Service(name='update',
                  path='/v%s/update/' % api_version,
-                 description='Update info',
-                 accept=['X-UserAgent-ID', 'If-Modified-Since',
-                         'Content-Type'])
+                 description='Update info')
 updatech = Service(name='updatech',
                    path='/v%s/update/{chid}' % api_version,
-                   description='Update channel',
-                   accept=['X-UserAgent-ID', 'Content-Type'])
+                   description='Update channel')
 item = Service(name='item',
                path='/v%s/{chid}' % api_version,
                description='item specific actions')
@@ -33,6 +28,13 @@ item = Service(name='item',
 def gen_token(request):
     base = uuid.uuid4().hex
     return base
+
+
+def has_uaid(request):
+    if not 'X-UserAgent-ID' in request.headers:
+        request.errors.add('header', 'X-UserAgent-ID',
+                           'Missing X-UserAgent-ID header.')
+        raise http.HTTPForbidden()
 
 
 @register.get()
@@ -48,6 +50,8 @@ def get_register(request):
         raise http.HTTPGone()
     logger = request.registry.get('logger')
     chid = request.matchdict.get('chid', gen_token(request))
+    if '.' not in chid:
+        chid = '%s.%s' % (uaid, chid)
     if storage.register_chid(uaid, chid, logger):
         return {'channelID': chid, 'uaid': uaid,
                 'pushEndpoint': '%s://%s/v%s/update/%s' % (
@@ -59,7 +63,7 @@ def get_register(request):
         raise http.HTTPConflict()
 
 
-@item.delete()
+@item.delete(validators=has_uaid)
 def del_chid(request):
     """ Delete a channel """
     storage = request.registry.get('storage')
@@ -69,8 +73,6 @@ def del_chid(request):
     flags = request.registry.get('flags')
     if flags.get('recovery') and not storage._uaid_is_known(uaid):
         raise http.HTTPGone()  # 410
-    if uaid is None:
-        raise http.HTTPForbidden()  # 403
     if chid is None:
         raise http.HTTPForbidden()  # 403
     if not storage.delete_chid(uaid, chid, logger):
@@ -78,30 +80,26 @@ def del_chid(request):
     return {}
 
 
-@update.get()
+@update.get(validators=has_uaid)
 def get_update(request):
     """ Return list of known CHIDs & versions for a UAID """
     uaid = request.headers.get('X-UserAgent-ID')
-    if not uaid:
-        raise http.HTTPForbidden()  # 403
     storage = request.registry.get('storage')
     logger = request.registry.get('logger')
     last_accessed = get_last_accessed(request)
     updates = storage.get_updates(uaid, last_accessed, logger)
-    if updates is None:
-        raise http.HTTPGone()  # 410
     if updates is False:
         raise http.HTTPServerError()
+    if updates.get('updates') is None or not len(updates.get('updates')):
+        raise http.HTTPGone()  # 410
     else:
         return updates
 
 
-@update.post()
+@update.post(validators=has_uaid)
 def post_update(request):
     """ Restore data from the client """
     uaid = request.headers.get('X-UserAgent-ID')
-    if not uaid:
-        raise http.HTTPForbidden()
     #Storage checks for duplicate uaid info
     storage = request.registry.get('storage')
     logger = request.registry.get('logger')
@@ -117,14 +115,13 @@ def post_update(request):
 @updatech.put()
 def channel_update(request):
     version = request.GET.get('version', request.POST.get('version'))
-    import pdb; pdb.set_trace()
     if version is None:
         raise http.HTTPForbidden  # 403
     storage = request.registry.get('storage')
     logger = request.registry.get('logger')
     chid = request.matchdict.get('chid')
     try:
-        if storage.update_chid(chid, version, logger):
+        if storage.update_channel(chid, version, logger):
             return {}
         else:
             flags = request.registry.get('flags')
@@ -134,6 +131,7 @@ def channel_update(request):
                     flags.delete('recovery')
                 raise http.HTTPServiceUnavailable()  # 503
             else:
+
                 raise http.HTTPNotFound()  # 404
     except Exception, e:
         logger.log(msg=traceback.format_exc(), type='error',

@@ -14,11 +14,12 @@ class SimplePushSQL(Base):
     __tablename__ = 'simplepush'
     ## this should be a multi-column index. No idea how to do that
     ## cleanly in SQLAlchemy's ORM.
-    chid = Column('chid', String(34), primary_key=True, unique=True)
-    uaid = Column('uaid', String(34), index=True)
-    vers = Column('version', String(255), nullable=True)
+    chid = Column('chid', String(36), primary_key=True, unique=True)
+    uaid = Column('uaid', String(36), index=True)
+    vers = Column('version', String(36), nullable=True)
     last = Column('last_accessed', Integer, index=True)
     state = Column('state', Integer, default=1)
+    pk = Column('pk', String(70), index=True)
 
 
 class Storage(StorageBase):
@@ -27,7 +28,7 @@ class Storage(StorageBase):
     LIVE = 1
     REGISTERED = 2
 
-    def __init__(self, config, flags, **kw):
+    def __init__(self, config, flags={}, **kw):
         try:
             super(Storage, self).__init__(config, **kw)
             self.metadata = MetaData()
@@ -35,8 +36,10 @@ class Storage(StorageBase):
             self.flags = flags
             #TODO: add the most common index.
         except Exception, e:
-            logger.log(msg='Could not initialize Storage "%s"' % str(e),
-                       type='error', severity=LOG.CRITICAL)
+            warnings.warn(repr(e))
+            if logger:
+                logger.log(msg='Could not initialize Storage "%s"' % str(e),
+                           type='error', severity=LOG.CRITICAL)
             raise e
 
     def _connect(self):
@@ -58,8 +61,10 @@ class Storage(StorageBase):
                                                        expire_on_commit=True))
             #self.metadata.create_all(self.engine)
         except Exception, e:
-            logger.log(msg='Could not connect to db "%s"' % repr(e),
-                       type='error', severity=LOG.EMERGENCY)
+            warnings.warn(repr(e))
+            if logger:
+                logger.log(msg='Could not connect to db "%s"' % repr(e),
+                           type='error', severity=LOG.EMERGENCY)
             raise e
 
     def health_check(self):
@@ -67,23 +72,30 @@ class Storage(StorageBase):
             healthy = True
             session = self.Session()
             sp = SimplePushSQL(chid='test', uaid='test',
+                               pk='test.test',
                                vers=0, last=int(time.time()))
             session.commit()
-            sp = self.session.query(SimplePushSQL).filter_by(chid='test')
+            sp = self.session.query(SimplePushSQL).filter_by(pk='test.test')
             session.delete(sp)
         except Exception, e:
             warnings.warn(str(e))
             return False
         return healthy
 
-    def update_chid(self, chid, vers, logger):
-        if chid is None:
+    def update_channel(self, pk, vers, logger):
+        if pk is None:
             return False
         session = self.Session()
         try:
-            rec = session.query(SimplePushSQL)\
-                .filter(SimplePushSQL.chid == chid,
-                        SimplePushSQL.state != self.DELETED).first()
+            if '.' not in pk:
+                rec = session.query(SimplePushSQL).filter(
+                            SimplePushSQL.chid == pk,
+                            SimplePushSQL.state != self.DELETED).first()
+            else:
+            # use memcache update.
+                rec = session.query(SimplePushSQL).filter(
+                                SimplePushSQL.pk == pk,
+                                SimplePushSQL.state != self.DELETED).first()
             if (rec):
                 rec.vers = vers
                 rec.state = self.LIVE
@@ -92,8 +104,9 @@ class Storage(StorageBase):
                 return True
         except Exception, e:
             warnings.warn(repr(e))
-            logger.log(msg="Uncaught error %s " % repr(e),
-                       type='error', severity=LOG.WARNING)
+            if logger:
+                logger.log(msg="Uncaught error %s " % repr(e),
+                           type='error', severity=LOG.WARNING)
             raise e
         return False
 
@@ -101,15 +114,24 @@ class Storage(StorageBase):
         try:
             session = self.Session()
             for pair in pairs:
-                session.add(SimplePushSQL(chid=pair['channelID'],
+                chid = pair['channelID']
+                # Temp patch until all code transitioned to pk
+                if '.' in chid:
+                    pk = chid
+                    uaid, chid = pk.split('.')
+                else:
+                    pk = '%s.%s' % (uaid, chid)
+                session.add(SimplePushSQL(pk=pk,
                                           uaid=uaid,
+                                          chid=chid,
                                           state=self.REGISTERED,
                                           vers=pair['version'],
                                           last=int(time.time())))
             session.commit()
         except Exception, e:
             warnings.warn(repr(e))
-            logger.log(type='error', severity=LOG.ERROR, msg=repr(e))
+            if logger:
+                logger.log(type='error', severity=LOG.ERROR, msg=repr(e))
             return False
         return True
 
@@ -121,7 +143,8 @@ class Storage(StorageBase):
                                         'version': None}], logger)
         except Exception, e:
             warnings.warn(repr(e))
-            logger.log(type='error', severity=LOG.WARN, msg=repr(e))
+            if logger:
+                logger.log(type='error', severity=LOG.WARN, msg=repr(e))
             return False
         return True
 
@@ -130,15 +153,20 @@ class Storage(StorageBase):
             return False
         try:
             session = self.Session()
-            rec = session.query(SimplePushSQL).filter_by(uaid=uaid,
-                                                         chid=chid).first()
+            if '.' in chid:
+                pk = chid
+                uaid, chid = chid.split('.')
+            else:
+                pk = '%s.%s' % (uaid, chid)
+            rec = session.query(SimplePushSQL).filter_by(pk=pk).first()
             if rec:
                 rec.state = self.DELETED
                 #rec.delete()
                 session.commit()
         except Exception, e:
             warnings.warn(repr(e))
-            logger.log(type='error', severity=LOG.WARN, msg=repr(e))
+            if logger:
+                logger.log(type='error', severity=LOG.WARN, msg=repr(e))
             return False
         return True
 
@@ -167,7 +195,8 @@ class Storage(StorageBase):
                     'expired': expired}
         except Exception, e:
             warnings.warn(repr(e))
-            logger.log(type='error', severity=LOG.WARN, msg=repr(e))
+            if logger:
+                logger.log(type='error', severity=LOG.WARN, msg=repr(e))
             raise e
         return False
 
@@ -193,23 +222,23 @@ class Storage(StorageBase):
             session.commit()
             return ",".join(digest)
         except Exception, e:
-            import pdb; pdb.set_trace();
             warnings.warn(repr(e))
-            logger.log(type='error', severity=LOG.WARN, msg=repr(e))
+            if logger:
+                logger.log(type='error', severity=LOG.WARN, msg=repr(e))
         return False
 
-    def _get_record(self, chid):
+    def _get_record(self, pk):
         result = []
         try:
             session = self.Session()
-            recs = session.query(SimplePushSQL).filter_by(chid=chid)
+            recs = session.query(SimplePushSQL).filter_by(pk=pk)
             for rec in recs:
                 result.append(rec.__dict__)
             return result
         except Exception, e:
-            import pdb; pdb.set_trace()
             warnings.warn(repr(e))
-            logger.log(type='error', severity=LOG.WARN, msg=repr(e))
+            if logger:
+                logger.log(type='error', severity=LOG.WARN, msg=repr(e))
 
     def _uaid_is_known(self, uaid):
         return self.Session().query(SimplePushSQL).filter_by(

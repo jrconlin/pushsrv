@@ -1,8 +1,8 @@
-from . import TConfig, FakeLogger, Request
+from . import TConfig, FakeLogger, FakeFlags, Request
 from pyramid import testing
-from simplepush_srv import views
+from simplepush_srv import main, views
 from simplepush_srv.storage.storage import Storage, SimplePushSQL
-from simplepush_srv.storage.flags import SimplePushFlags
+from webtest import TestApp
 import json
 import pyramid.httpexceptions as http
 import unittest2
@@ -12,126 +12,108 @@ import time
 class TestViews(unittest2.TestCase):
 
     def load(self):
-        data = [{'channelID': 'aaa', 'uaid': '111', 'version': 1},
-                {'channelID': 'bbb', 'uaid': '111', 'version': 1},
-                {'channelID': 'exp', 'uaid': '111', 'version': 0, 'state': 0},
-                {'channelID': 'ccc', 'uaid': '222', 'version': 2}]
+        data = [{'pk': '111.aaa', 'channelID': 'aaa', 'uaid': '111',
+                 'version': 1},
+                 {'pk': '111.bbb', 'channelID': 'bbb', 'uaid': '111',
+                     'version': 1},
+                 {'pk': '111.exp', 'channelID': 'exp', 'uaid': '111',
+                     'version': 0, 'state': 0},
+                 {'pk': '222.ccc', 'channelID': 'ccc', 'uaid': '222',
+                     'version': 2}]
         session = self.storage.Session()
         for datum in data:
             session.add(SimplePushSQL(chid=datum['channelID'],
                                       uaid=datum['uaid'],
                                       vers=datum['version'],
+                                      pk=datum['pk'],
                                       last=time.time(),
                                       state=datum.get('state', 1)))
         session.commit()
 
-    def req(self, matchdict={}, user_id=None, headers=None, **kw):
-
-        class FakeFlags(dict):
-
-            def delete(self, key):
-                del(self[key])
-
-        class Reg(dict):
-
-            settings = {}
-
-            def __init__(self, settings=None, **kw):
-                super(Reg, self).__init__(**kw)
-                if settings:
-                    self.settings = settings
-
-        request = Request(headers=headers, **kw)
-        request.GET = kw.get('params',{})
-        if 'post' in kw:
-            request.POST = kw.get('post', {})
-        request.registry = Reg(settings=self.config.get_settings())
-        request.registry['storage'] = self.storage
-        request.registry['logger'] = self.logger
-        request.registry['safe'] = kw.get('safe') or {'start': time.time(),
-                                                      'length': 60,
-                                                      'mode': False}
-        request.registry['flags'] = FakeFlags(**kw.get('flags', {}))
-        if matchdict:
-            request.matchdict.update(matchdict)
-        return request
-
     def setUp(self):
-        self.config = testing.setUp()
-        tsettings = TConfig({'db.type': 'sqlite',
-                             'db.db': ':memory:',
-                             'logging.use_metlog': False})
-        self.storage = Storage(config=tsettings)
-        self.logger = FakeLogger()
+        self.flags = FakeFlags()
+        self.settings = {
+            'db.type': 'sqlite',
+            #'db.db': ':memory:',
+            'db.db': '/tmp/test.db',
+            'logging.use_metlog': False,
+            'flags': self.flags,
+            'logger': FakeLogger()}
+        self.app = TestApp(main({}, **self.settings))
+        # pull these out of the fake app for convenience.
+        self.storage = self.app.app.registry.get('storage')
+        self.logger = self.app.app.registry.get('logger')
 
     def tearDown(self):
         self.storage.purge()
 
     def test_get_register(self):
         self.load()
-        response = views.get_register(self.req())
-        assert('uaid' in response)
-        assert('channelID' in response)
-        assert('pushEndpoint' in response)
-        assert(response['uaid'] != response['channelID'])
-        response2 = views.get_register(self.req(headers={'X-UserAgent-ID':
-            response['uaid']}))
-        assert(response['uaid'] == response2['uaid'])
-        assert(response['channelID'] != response2['channelID'])
+        response = self.app.get('/v1/register/')
+        assert('uaid' in response.json_body)
+        assert('channelID' in response.json_body)
+        assert('pushEndpoint' in response.json_body)
+        assert(response.json_body['uaid'] != response.json_body['channelID'])
+        response2 = self.app.put('/v1/register/', headers={'X-UserAgent-ID':
+                                              str(response.json_body['uaid'])})
+        assert(response.json_body['uaid'] == response2.json_body['uaid'])
+        assert(response.json_body['channelID'] !=
+                response2.json_body['channelID'])
 
     def test_del_chid(self):
         self.load()
-        self.assertRaises(http.HTTPForbidden, views.del_chid, self.req())
-        self.assertRaises(http.HTTPForbidden, views.del_chid,
-                          self.req(headers={'X-UserAgent-ID': 'aaa'}))
-        response = views.del_chid(self.req(headers={'X-UserAgent-ID': '111'},
-                                           matchdict={'chid': 'aaa'}))
-        assert(response == {})
+        self.flags['recovery'] = time.time()
+        self.app.delete('/v1/112.aaa', headers={'X-UserAgent-ID': '112'},
+                        status=410)
+        self.flags.delete('recovery')
+        self.app.delete('/v1/', headers={'X-UserAgent-ID': '112'}, status=404)
+        self.app.delete('/v1/111.aaa', status=403)
+        response = self.app.delete('/v1/111.aaa',
+                                   headers={'X-UserAgent-ID': '111'})
+        assert(response.json_body == {})
 
     def test_get_update(self):
         self.load()
-        self.assertRaises(http.HTTPForbidden, views.get_update, self.req())
-        response = views.get_update(self.req(headers={'X-UserAgent-ID':
-                                                      '111'}))
+
+        self.app.get('/v1/update/', status=403)
+        response = self.app.get('/v1/update/',
+                                headers={'X-UserAgent-ID': '111'}).json_body
         assert('exp' in response.get('expired'))
-        assert(response['digest'] == 'aaa,bbb')
         assert('channelID' in response['updates'][0])
         assert('version' in response['updates'][0])
-        self.assertRaises(http.HTTPGone, views.get_update,
-                          self.req(headers={'X-UserAgent-ID': '666'}))
+        response = self.app.get('/v1/update/',
+                                headers={'X-UserAgent-ID': '666'},
+                                status=410)
 
     def test_post_update(self):
-        restore = [{'channelID': 'aaa', 'version': '5'},
-                   {'channelID': 'bbb', 'version': '6'}]
-        self.assertRaises(http.HTTPForbidden, views.post_update, self.req())
-        response = views.post_update(self.req(headers={'X-UserAgent-ID':
-                                                       '111',
-                                                       'Content-Type':
-                                                       'application/json'},
-                                              body=json.dumps(restore)))
-        assert(response.get('digest') == 'aaa,bbb')
-        self.assertRaises(http.HTTPGone, views.post_update,
-                          self.req(headers={'X-UserAgent-ID': '111'},
-                                   body=json.dumps(restore)))
+        restore = [{'channelID': '111.aaa', 'version': '5'},
+                   {'channelID': '111.bbb', 'version': '6'}]
+        response = self.app.post('/v1/update/',
+                                 params=json.dumps(restore),
+                                 headers={'Content-Type': 'application/json'},
+                                 status=403)
+        response = self.app.post('/v1/update/',
+                                 params=json.dumps(restore),
+                                 headers={'X-UserAgent-ID': '111',
+                                     'Content-Type': 'application/json'},
+                                 status=200)
+
+        assert(response.json_body.get('digest') == '111.aaa,111.bbb')
+        response = self.app.post('/v1/update/',
+                                params=json.dumps(restore),
+                                headers={'X-UserAgent-ID': '111',
+                                         'Content-Type': 'application/json'},
+                                status=410)
 
     def test_channel_update(self):
         self.load()
-        response = views.channel_update(self.req(matchdict={'chid': 'aaa'},
-                                                 post={'version': '9'}))
-        assert(response == {})
-        self.assertRaises(http.HTTPServiceUnavailable, views.channel_update,
-                          self.req(matchdict={'chid': 'zzz'},
-                                   post={'version': '9'},
-                                   safe={'mode': True,
-                                         'start': time.time(),
-                                         'length': 60},
-                                   flags={'recovery': time.time()}
-                                   ))
-        self.assertRaises(http.HTTPNotFound, views.channel_update,
-                          self.req(matchdict={'chid': 'zzz'},
-                                   post={'version': '9'},
-                                   safe={'mode': False,
-                                         'start': time.time(),
-                                         'length': 60},
-                                   ))
+        response = self.app.put('/v1/update/111.aaa',
+                                params={'version': 9})
+        assert(response.json_body == {})
+        self.flags['recovery'] = time.time()
+        response = self.app.put('/v1/update/111.zzz',
+                                params={'version': 9}, status=503)
+        self.flags.delete('recovery')
+        response = self.app.put('/v1/update/111.zzz',
+                                params={'version': 9}, status=404)
 
