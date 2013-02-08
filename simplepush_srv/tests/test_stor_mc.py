@@ -30,12 +30,10 @@ class TestStorage(unittest2.TestCase):
         self.load()
         self.storage.update_channel('111.aaa', 2, FakeLogger())
         rec = self.storage._get_record('111.aaa')
-        # no rec returned
         self.assertEqual(int(rec.get('version')), 2)
 
     def test_register_chids(self):
         self.load()
-        # no recs returned.
         self.storage.register_chid('444', 'ddd', FakeLogger())
         rec = self.storage._get_record('444.ddd')
         self.assertEqual(rec.get('uaid'), '444')
