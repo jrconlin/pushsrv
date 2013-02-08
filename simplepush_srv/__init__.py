@@ -7,13 +7,9 @@
 from .logger import Logging
 from .resources import Root
 
-from .storage.flags import SimplePushFlags
-
 from pyramid.config import Configurator
 from mozsvc.config import load_into_settings
 from mozsvc.middlewares import _resolve_name
-
-import time
 
 logger = None
 
@@ -68,17 +64,20 @@ def main(global_config, **settings):
     config.include("mozsvc")
     config.scan(".views")
     if '__file__' in global_config:
+        # settings are coming from the file.
         load_into_settings(global_config['__file__'], settings)
         logger = Logging(config, global_config['__file__'])
-        # Set in recovery if app has not been running that long.
+        # Flags contains things like "recovery mode"
+        # Do not specify this as a relative path. TestApp blows up.
         flags = _resolve_name(settings.get('flags.backend',
                        'simplepush_srv.storage.flags.SimplePushFlags'))(config)
     else:
+        # this was passed in by unit tests
         logger = settings['logger']
         flags = settings['flags']
     config.registry['flags'] = flags
     config.registry['storage'] = _resolve_name(settings.get('db.backend',
-                      'simplepush_srv.storage.storage.Storage'))(config, flags)
+                      'simplepush_srv.storage.sql.Storage'))(config, flags)
     config.registry['logger'] = logger
     if settings.get('dbg.self_diag', False):
         self_diag(config)

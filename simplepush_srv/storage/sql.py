@@ -110,41 +110,26 @@ class Storage(StorageBase):
             raise e
         return False
 
-    def register_chids(self, uaid, pairs, logger):
+    def register_chid(self, uaid, chid, logger, version=None):
         try:
             session = self.Session()
-            for pair in pairs:
-                chid = pair['channelID']
-                # Temp patch until all code transitioned to pk
-                if '.' in chid:
-                    pk = chid
-                    uaid, chid = pk.split('.')
-                else:
-                    pk = '%s.%s' % (uaid, chid)
-                session.add(SimplePushSQL(pk=pk,
-                                          uaid=uaid,
-                                          chid=chid,
-                                          state=self.REGISTERED,
-                                          vers=pair['version'],
-                                          last=int(time.time())))
+            # Temp patch until all code transitioned to pk
+            if '.' in chid:
+                pk = chid
+                uaid, chid = pk.split('.')
+            else:
+                pk = '%s.%s' % (uaid, chid)
+            session.add(SimplePushSQL(pk=pk,
+                                      uaid=uaid,
+                                      chid=chid,
+                                      state=self.REGISTERED,
+                                      vers=version,
+                                      last=int(time.time())))
             session.commit()
         except Exception, e:
             warnings.warn(repr(e))
             if logger:
                 logger.log(type='error', severity=LOG.ERROR, msg=repr(e))
-            return False
-        return True
-
-    def register_chid(self, uaid, chid, logger):
-        if chid is None or uaid is None:
-            return False
-        try:
-            self.register_chids(uaid, [{'channelID': chid,
-                                        'version': None}], logger)
-        except Exception, e:
-            warnings.warn(repr(e))
-            if logger:
-                logger.log(type='error', severity=LOG.WARN, msg=repr(e))
             return False
         return True
 
@@ -170,11 +155,12 @@ class Storage(StorageBase):
             return False
         return True
 
-    def get_updates(self, uaid, last_accessed=None, logger=None):
+    def get_updates(self, uaid, last_accessed=None, logger=None,
+                    withLatest=False):
         if uaid is None:
             raise StorageException('No UserAgentID provided')
         try:
-            sql = ('select chid, version, state from ' +
+            sql = ('select chid, version, state, last_accessed from ' +
                    'simplepush where uaid=:uaid')
             params = {'uaid': uaid}
             if last_accessed:
@@ -185,8 +171,11 @@ class Storage(StorageBase):
             expired = []
             for record in records:
                 if record.state:
-                    updates.append({'channelID': record.chid,
-                                    'version': record.version})
+                    data = {'channelID': record.chid,
+                                    'version': record.version}
+                    if withLatest:
+                        data['last'] = record.last
+                    updates.append(data)
                 else:
                     expired.append(record.chid)
             if not len(updates) and self.flags.get('recovery'):
@@ -228,12 +217,14 @@ class Storage(StorageBase):
         return False
 
     def _get_record(self, pk):
-        result = []
         try:
             session = self.Session()
-            recs = session.query(SimplePushSQL).filter_by(pk=pk)
-            for rec in recs:
-                result.append(rec.__dict__)
+            rec = session.query(SimplePushSQL).filter_by(pk=pk).first()
+            if rec is None:
+                return None
+            result = rec.__dict__
+            result['version'] = result['vers']
+            del result['vers']
             return result
         except Exception, e:
             warnings.warn(repr(e))
@@ -250,6 +241,18 @@ class Storage(StorageBase):
         now = time.time()
         # delete all records marked deleted that are older than db.clean.deleted
         # delete all records that are unused older than db.clean.unused
+
+    def _load(self, data=[]):
+        session = self.Session()
+        for datum in data:
+            pk = '%s.%s' % (datum['uaid'], datum['channelID'])
+            session.add(SimplePushSQL(pk=pk,
+                                      chid=datum['channelID'],
+                                      uaid=datum['uaid'],
+                                      vers=datum['version'],
+                                      last=datum.get('last_accessed'),
+                                      state=datum.get('state', 1)))
+        session.commit()
 
     def purge(self):
         session = self.Session()

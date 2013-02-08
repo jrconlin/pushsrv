@@ -1,10 +1,7 @@
-from . import TConfig, FakeLogger, FakeFlags, Request
-from pyramid import testing
-from simplepush_srv import main, views
-from simplepush_srv.storage.storage import Storage, SimplePushSQL
+from . import FakeLogger, FakeFlags
+from simplepush_srv import main
 from webtest import TestApp
 import json
-import pyramid.httpexceptions as http
 import unittest2
 import time
 
@@ -14,25 +11,19 @@ class TestViews(unittest2.TestCase):
     def load(self):
         data = [{'pk': '111.aaa', 'channelID': 'aaa', 'uaid': '111',
                  'version': 1},
-                 {'pk': '111.bbb', 'channelID': 'bbb', 'uaid': '111',
-                     'version': 1},
-                 {'pk': '111.exp', 'channelID': 'exp', 'uaid': '111',
-                     'version': 0, 'state': 0},
-                 {'pk': '222.ccc', 'channelID': 'ccc', 'uaid': '222',
-                     'version': 2}]
-        session = self.storage.Session()
-        for datum in data:
-            session.add(SimplePushSQL(chid=datum['channelID'],
-                                      uaid=datum['uaid'],
-                                      vers=datum['version'],
-                                      pk=datum['pk'],
-                                      last=time.time(),
-                                      state=datum.get('state', 1)))
-        session.commit()
+                {'pk': '111.bbb', 'channelID': 'bbb', 'uaid': '111',
+                 'version': 1},
+                {'pk': '111.exp', 'channelID': 'exp', 'uaid': '111',
+                 'version': 0, 'state': 0},
+                {'pk': '222.ccc', 'channelID': 'ccc', 'uaid': '222',
+                 'version': 2}]
+        self.storage._load(data)
 
     def setUp(self):
         self.flags = FakeFlags()
         self.settings = {
+            'db.backend': 'simplepush_srv.storage.memcache_sql.Storage',
+            'db.memcache_servers': 'localhost:11211',
             'db.type': 'sqlite',
             #'db.db': ':memory:',
             'db.db': '/tmp/test.db',

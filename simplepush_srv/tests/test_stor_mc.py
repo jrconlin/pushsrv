@@ -1,5 +1,4 @@
-from simplepush_srv.storage.storage import (Storage, SimplePushSQL,
-                                            StorageException)
+from simplepush_srv.storage.memcache_sql import (Storage, StorageException)
 from . import TConfig, FakeLogger
 import unittest2
 
@@ -7,8 +6,10 @@ import unittest2
 class TestStorage(unittest2.TestCase):
 
     def setUp(self):
-        self.storage = Storage(config=TConfig({'db.type': 'sqlite',
-                                               'db.db': ':memory:'}))
+        self.storage = Storage(config=TConfig(
+                {'db.backend': 'simplepush_srv.storage.memcache_sql.Storage',
+                 'db.type': 'sqlite',
+                 'db.db': ':memory:'}))
 
     def tearDown(self):
         self.storage.purge()
@@ -23,35 +24,28 @@ class TestStorage(unittest2.TestCase):
                     {'channelID': 'exp', 'uaid': '111', 'version': 0,
                      'state': 0, 'last_accessed': 20},
                     {'channelID': 'ccc', 'uaid': '222', 'version': 2}]
-        session = self.storage.Session()
-        for datum in data:
-            pk = "%s.%s" % (datum['uaid'], datum['channelID'])
-            session.add(SimplePushSQL(pk=pk,
-                                      chid=datum['channelID'],
-                                      uaid=datum['uaid'],
-                                      vers=datum['version'],
-                                      last=datum.get('last_accessed'),
-                                      state=datum.get('state', 1)))
-        session.commit()
+        self.storage._load(data)
 
     def test_update_child(self):
         self.load()
         self.storage.update_channel('111.aaa', 2, FakeLogger())
         rec = self.storage._get_record('111.aaa')
-        self.assertEqual(rec[0].get('vers'), '2')
+        # no rec returned
+        self.assertEqual(int(rec.get('version')), 2)
 
     def test_register_chids(self):
         self.load()
+        # no recs returned.
         self.storage.register_chid('444', 'ddd', FakeLogger())
         rec = self.storage._get_record('444.ddd')
-        self.assertEqual(rec[0].get('uaid'), '444')
+        self.assertEqual(rec.get('uaid'), '444')
 
     def test_delete_chid(self):
         self.load()
         self.storage.delete_chid('111', 'aaa', FakeLogger())
         rec = self.storage._get_record('111.aaa')
-        self.assertEqual(len(rec), 1)
-        self.assertEqual(rec[0].get('state'), 0)
+        assert (rec is not None)
+        self.assertEqual(rec.get('state'), 0)
 
     def test_get_updates(self):
         self.load()

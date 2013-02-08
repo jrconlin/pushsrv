@@ -29,6 +29,7 @@ mock==1.0.0
 nose==1.2.1
 paster==0.7
 psutil==0.6.1
+pymemcache==0.8
 pyramid==1.4a2
 pyramid-beaker==0.7
 python-dateutil==2.1
@@ -38,7 +39,7 @@ repoze.lru==0.6
 repoze.who==2.0
 repoze.who.plugins.browserid==0.5.0
 requests==0.14.1
-simplejson==2.6.2
+simplepush-srv==0.003
 six==1.2.0
 translationstring==1.1
 umemcache==1.6

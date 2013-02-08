@@ -87,7 +87,10 @@ def get_update(request):
     storage = request.registry.get('storage')
     logger = request.registry.get('logger')
     last_accessed = get_last_accessed(request)
-    updates = storage.get_updates(uaid, last_accessed, logger)
+    try:
+        updates = storage.get_updates(uaid, last_accessed, logger)
+    except StorageException, e:
+        raise http.HTTPGone
     if updates is False:
         raise http.HTTPServerError()
     if updates.get('updates') is None or not len(updates.get('updates')):
@@ -133,6 +136,8 @@ def channel_update(request):
             else:
 
                 raise http.HTTPNotFound()  # 404
+    except http.HTTPServiceUnavailable, e:
+        raise e
     except Exception, e:
         logger.log(msg=traceback.format_exc(), type='error',
                    severity=LOG.CRITICAL)
