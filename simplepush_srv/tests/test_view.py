@@ -4,6 +4,7 @@ from webtest import TestApp
 import json
 import unittest2
 import time
+import uuid
 
 
 class TestViews(unittest2.TestCase):
@@ -43,13 +44,15 @@ class TestViews(unittest2.TestCase):
         response = self.app.get('/v1/register/')
         assert('uaid' in response.json_body)
         assert('channelID' in response.json_body)
+        assert('.' not in response.json_body['channelID'])
         assert('pushEndpoint' in response.json_body)
         assert(response.json_body['uaid'] != response.json_body['channelID'])
-        response2 = self.app.put('/v1/register/', headers={'X-UserAgent-ID':
-                                              str(response.json_body['uaid'])})
+        myChid = uuid.uuid4().hex
+        response2 = self.app.put('/v1/register/%s' % (myChid),
+                                 headers={'X-UserAgent-ID':
+                                          str(response.json_body['uaid'])})
         assert(response.json_body['uaid'] == response2.json_body['uaid'])
-        assert(response.json_body['channelID'] !=
-                response2.json_body['channelID'])
+        assert(response2.json_body['channelID'] == myChid)
 
     def test_del_chid(self):
         self.load()

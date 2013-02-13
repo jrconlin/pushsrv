@@ -1,6 +1,7 @@
 from . import LOG
 from mozsvc.metrics import Service
 from utils import get_last_accessed
+from .storage import StorageException
 import pyramid.httpexceptions as http
 import time
 import traceback
@@ -50,9 +51,8 @@ def get_register(request):
         raise http.HTTPGone()
     logger = request.registry.get('logger')
     chid = request.matchdict.get('chid', gen_token(request))
-    if '.' not in chid:
-        chid = '%s.%s' % (uaid, chid)
-    if storage.register_chid(uaid, chid, logger):
+    uchid = '%s.%s' % (uaid, chid)
+    if storage.register_chid(uaid, uchid, logger):
         return {'channelID': chid, 'uaid': uaid,
                 'pushEndpoint': '%s://%s/v%s/update/%s' % (
                     request.environ.get('wsgi.url_scheme'),
@@ -90,6 +90,7 @@ def get_update(request):
     try:
         updates = storage.get_updates(uaid, last_accessed, logger)
     except StorageException, e:
+        logger.log(msg=repr(e), type='error', severity=LOG.DEBUG)
         raise http.HTTPGone
     if updates is False:
         raise http.HTTPServerError()
@@ -110,7 +111,7 @@ def post_update(request):
         data = request.json_body
         digest = storage.reload_data(uaid, data, logger)
         return {'digest': digest}
-    except Exception, e:
+    except Exception:
         logger.log(msg=traceback.format_exc(), type='error', severity=LOG.WARN)
         raise http.HTTPGone
 
