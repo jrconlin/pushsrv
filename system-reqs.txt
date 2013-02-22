@@ -9,5 +9,6 @@ make
 mysql
 mysql-devel
 python-virtualenv
+zookeeper
 # If virtualenv is not available, you may install it using the following:
 # sudo easy_install virtualenv
