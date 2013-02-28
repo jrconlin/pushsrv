@@ -22,7 +22,7 @@ distribute==0.6.28
 docutils==0.9.1
 funkload==1.16.1
 iowait==0.1
-kazoo==0.9
+#kazoo==0.9
 logging==0.4.9.6
 metlog-py==0.9.7
 mock==1.0.0
