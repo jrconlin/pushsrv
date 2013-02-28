@@ -1,19 +1,21 @@
 import unittest2
-from simplepush_srv.storage.flags import ConfigFlags
+from simplepush_srv.storage.fakeflags import ConfigFlags
 
 
 class TestFlags(unittest2.TestCase):
 
-    test_conf = {'flags.zk.path': '/test/simplepush/config',
+    test_conf = {
+                 'flags.zk.path': '/test/simplepush/config',
                  'flags.alpha': 'Apple',
                  'flags.beta': 'Banana'}
 
     def setUp(self):
         self.flags = ConfigFlags(self.test_conf)
-        self.flags._init_zk(self.test_conf)
+        self.flags._init(self.test_conf)
 
     def tearDown(self):
-        self.flags.zk.delete(self.flags.zk_path)
+        #self.flags.zk.delete(self.flags.zk_path)
+        pass
 
 
     def test_init(self):

@@ -15,7 +15,7 @@ with open(os.path.join(here, 'README.md')) as f:
 
 
 setup(name=PROJECT,
-      version=0.005,
+      version=0.006,
       description=PROJECT,
       long_description=README,
       classifiers=[

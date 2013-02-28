@@ -22,6 +22,7 @@ distribute==0.6.28
 docutils==0.9.1
 funkload==1.16.1
 iowait==0.1
+kazoo==0.9
 logging==0.4.9.6
 metlog-py==0.9.7
 mock==1.0.0
@@ -29,7 +30,7 @@ mock==1.0.0
 nose==1.2.1
 paster==0.7
 psutil==0.6.1
-pymemcache==0.8
+-e git://github.com/pinterest/pymemcache.git@f7905a8b2c85e2c56c5a95cb8c975325199f780d#egg=pymemcache-dev
 pyramid==1.4a2
 pyramid-beaker==0.7
 python-dateutil==2.1
@@ -39,6 +40,7 @@ repoze.lru==0.6
 repoze.who==2.0
 repoze.who.plugins.browserid==0.5.0
 requests==0.14.1
+simplejson==2.6.2
 six==1.2.0
 translationstring==1.1
 umemcache==1.6
